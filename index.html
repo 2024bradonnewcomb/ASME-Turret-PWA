@@ -19,15 +19,36 @@
             height: 100vh;
         }
 
-        #hud-container {
+        #camera-container {
             position: relative;
-            width: 300px;
-            height: 300px;
-            border: 2px solid #00ff4133;
-            border-radius: 50%;
+            width: 100vw;
+            height: 60vh;
+            background: #000;
+            overflow: hidden;
         }
 
-        /* Fixed Crosshair */
+        #camera-feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        /* Aiming Dot */
+        #aiming-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            background: #ff3e3e;
+            border: 2px solid #fff;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px #ff3e3e;
+            pointer-events: none;
+        }
+
+        /* Crosshair */
         .crosshair {
             position: absolute;
             top: 50%;
@@ -39,16 +60,25 @@
             pointer-events: none;
         }
 
-        /* Target Dot - The Guidance */
-        #target-dot {
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
             position: absolute;
-            width: 20px;
+            background: #00ff41;
+        }
+
+        .crosshair::before {
+            width: 2px;
             height: 20px;
-            background: #ff3e3e;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            transition: top 0.1s ease-out, left 0.1s ease-out;
-            box-shadow: 0 0 15px #ff3e3e;
+            top: -10px;
+            left: 19px;
+        }
+
+        .crosshair::after {
+            width: 20px;
+            height: 2px;
+            top: 19px;
+            left: -10px;
         }
 
         #data-panel {
@@ -56,8 +86,38 @@
             text-align: center;
             font-size: 14px;
             background: rgba(0, 255, 65, 0.1);
-            padding: 10px;
+            padding: 15px;
             border-radius: 5px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .input-group {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .input-group label {
+            min-width: 60px;
+        }
+
+        input[type="number"] {
+            background: #000;
+            color: #00ff41;
+            border: 1px solid #00ff41;
+            padding: 5px 10px;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            width: 80px;
+            text-align: center;
+        }
+
+        input[type="number"]:focus {
+            outline: none;
+            box-shadow: 0 0 5px #00ff41;
         }
 
         button {
@@ -74,95 +134,114 @@
 </head>
 <body>
 
-    <div id="hud-container">
+    <div id="camera-container">
+        <video id="camera-feed" autoplay playsinline></video>
         <div class="crosshair"></div>
-        <div id="target-dot" style="top: 50%; left: 50%;"></div>
+        <div id="aiming-dot"></div>
     </div>
 
     <div id="data-panel">
-        <div>PITCH: <span id="val-pitch">0</span>°</div>
-        <div>REQD: <span id="val-req">0</span>°</div>
-        <div>DIST: <span id="val-dist">5</span>m</div>
+        <div class="input-group">
+            <label for="dist-x">DIST X:</label>
+            <input type="number" id="dist-x" value="5" step="0.1" min="0">m
+        </div>
+        <div class="input-group">
+            <label for="dist-y">DIST Y:</label>
+            <input type="number" id="dist-y" value="0" step="0.1">m
+        </div>
+        <div>ELEVATION: <span id="val-elevation">0</span>°</div>
+        <div>HEIGHT Z: <span id="val-height">0</span>m</div>
     </div>
 
-    <button id="start-btn">Initialize Sensors</button>
-    <button id="zero-btn" disabled>Zero Sensors</button>
+    <button id="start-btn">Start Camera</button>
 
     <script>
-        const log = document.getElementById('val-pitch'); // Borrowing this for quick logs
-        const dot = document.getElementById('target-dot');
-        
-        // Zero offset variables
-        let zeroPitch = 0;
-        let zeroYaw = 0;
-        let zeroRoll = 0;
-        
-        // Current raw sensor values
-        let currentPitch = 0;
-        let currentYaw = 0;
-        let currentRoll = 0;
+        const cameraFeed = document.getElementById('camera-feed');
+        const aimingDot = document.getElementById('aiming-dot');
+        const elevationDisplay = document.getElementById('val-elevation');
+        const heightDisplay = document.getElementById('val-height');
+        const distXInput = document.getElementById('dist-x');
+        const distYInput = document.getElementById('dist-y');
+        const startBtn = document.getElementById('start-btn');
+
+        let currentElevation = 0;
+        let stream = null;
+
+        // Calculate height using distance and elevation angle
+        function calculateHeight() {
+            const distX = parseFloat(distXInput.value) || 0;
+            const distY = parseFloat(distYInput.value) || 0;
+            const horizontalDistance = Math.sqrt(distX * distX + distY * distY);
+            
+            if (horizontalDistance === 0) {
+                heightDisplay.innerText = "0.0";
+                return;
+            }
+            
+            // Height = horizontal_distance * tan(elevation_angle)
+            const height = horizontalDistance * Math.tan(currentElevation * Math.PI / 180);
+            heightDisplay.innerText = height.toFixed(2);
+        }
 
         function handleOrientation(event) {
-            // If these values are null, the sensor exists but isn't sending data
-            if (event.beta === null || event.alpha === null) {
-                console.warn("Sensors detected but returning null data.");
+            if (event.beta === null) {
                 return;
             }
 
-            // Alpha = Yaw (0 to 360)
-            // Beta = Pitch (-180 to 180)
-            // Gamma = Roll (-90 to 90)
-            currentPitch = event.beta;
-            currentYaw = event.alpha;
-            currentRoll = event.gamma;
+            // Beta is pitch (-180 to 180), negative values mean looking up
+            // For elevation, we want positive values when looking up
+            currentElevation = -event.beta; // Invert so positive is up
             
-            const pitch = event.beta - zeroPitch;
-            const yaw = event.alpha - zeroYaw;
-            const roll = event.gamma - zeroRoll;
-
-            // Update the UI
-            document.getElementById('val-pitch').innerText = pitch.toFixed(1);
-            
-            // Move the dot visually to prove it's working
-            // This moves the dot based on the phone's tilt
-            const yPos = 50 + (pitch * 0.5); 
-            const xPos = 50 + (event.gamma * 0.5);
-            dot.style.top = `${yPos}%`;
-            dot.style.left = `${xPos}%`;
+            elevationDisplay.innerText = currentElevation.toFixed(1);
+            calculateHeight();
         }
 
-        document.getElementById('start-btn').onclick = async () => {
+        async function startCamera() {
             try {
-                // Feature detection for iOS 13+
+                // Request camera access
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment', // Use back camera
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    }
+                });
+
+                cameraFeed.srcObject = stream;
+                
+                // Request device orientation permission
                 if (typeof DeviceOrientationEvent.requestPermission === 'function') {
                     const response = await DeviceOrientationEvent.requestPermission();
                     if (response === 'granted') {
                         window.addEventListener('deviceorientation', handleOrientation);
                     } else {
-                        alert("Permission denied. Check your browser settings.");
+                        alert("Orientation permission denied. Height calculation won't work.");
                     }
                 } else {
-                    // Non-iOS devices or older versions
+                    // Non-iOS devices
                     window.addEventListener('deviceorientation', handleOrientation);
                 }
-                document.getElementById('start-btn').innerText = "SENSORS ACTIVE";
-                document.getElementById('zero-btn').disabled = false;
-            } catch (error) {
-                alert("Error initializing sensors: " + error);
-            }
-        };
 
-        document.getElementById('zero-btn').onclick = () => {
-            // Set zero offsets to current raw sensor values
-            zeroPitch = currentPitch;
-            zeroYaw = currentYaw;
-            zeroRoll = currentRoll;
-            document.getElementById('val-pitch').innerText = "0.0";
-            document.getElementById('zero-btn').innerText = "SENSORS ZEROED";
-            setTimeout(() => {
-                document.getElementById('zero-btn').innerText = "Zero Sensors";
-            }, 2000);
-        };
+                startBtn.innerText = "CAMERA ACTIVE";
+                startBtn.disabled = true;
+
+            } catch (error) {
+                alert("Error accessing camera: " + error.message);
+            }
+        }
+
+        // Update height when distance inputs change
+        distXInput.addEventListener('input', calculateHeight);
+        distYInput.addEventListener('input', calculateHeight);
+
+        startBtn.addEventListener('click', startCamera);
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+        });
     </script>
 </body>
 </html>
