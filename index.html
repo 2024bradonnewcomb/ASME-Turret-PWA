@@ -90,29 +90,45 @@
         let currentPitch = 0;
         const G = 9.806;
 
+        function solveBallistics(x, y, v) {
+            const v2 = v * v;
+            const root = Math.pow(v, 4) - G * (G * (x * x) + 2 * y * v2);
+            if (root < 0) return null;
+            return Math.atan((v2 - Math.sqrt(root)) / (G * x)) * (180 / Math.PI);
+        }
+
         function updateHUD() {
             const dH = parseFloat(document.getElementById('in-dist').value) || 1;
             const v0 = parseFloat(document.getElementById('in-vel').value) || 1;
             const camUp = parseFloat(document.getElementById('in-camy').value) || 0;
             const vFOV = parseFloat(document.getElementById('in-fov').value) || 50;
 
+            // 1. How long does the bullet take to get there? (t = d / v)
             const timeOfFlight = dH / v0;
+
+            // 2. How far does it fall in that time? (h = 0.5 * g * t^2)
             const gravityDrop = 0.5 * G * Math.pow(timeOfFlight, 2);
+
+            // 3. Total vertical offset (Gravity drop + Camera height difference)
+            // We ADD camUp because the camera being higher makes the impact look even lower
             const totalDrop = gravityDrop + camUp;
 
+            // 4. Convert that linear drop into an angle (theta = arctan(drop / distance))
             const dropAngleRad = Math.atan2(totalDrop, dH);
             const dropAngleDeg = dropAngleRad * (180 / Math.PI);
 
+            // 5. Map to screen
+            // We use '+' to move the dot DOWN (higher % from top)
             const halfFOV = (vFOV / 2) * (Math.PI / 180);
             const screenOffset = (Math.tan(dropAngleRad) / Math.tan(halfFOV)) * 50;
             
-            const finalY = 50 + screenOffset;
+            const finalY = 50 + screenOffset; // The '+' makes it sit below center
 
             if (finalY > 100 || finalY < 0) {
                 statusDisp.innerText = "IMPACT OFF SCREEN";
                 dot.style.display = "none";
             } else {
-                statusDisp.innerText = "ACTIVE";
+                statusDisp.innerText = "CALCULATED";
                 dot.style.display = "block";
                 dot.style.top = `${finalY}%`;
                 reqDisp.innerText = (currentPitch + dropAngleDeg).toFixed(1);
@@ -120,62 +136,60 @@
         }
 
         function handleMotion(e) {
-            const acc = e.accelerationIncludingGravity;
-            if (!acc) return;
-
+            // Convert degrees to radians for math
+            const beta = e.beta * (Math.PI / 180);
+            const gamma = e.gamma * (Math.PI / 180);
+            
             let p = 0;
-            // Cross-browser orientation check
             const orientation = window.orientation || (screen.orientation && screen.orientation.angle) || 0;
 
             if (orientation === 90 || orientation === -90) {
-                // LANDSCAPE: Use Z and Y to find pitch.
-                // This ignores the X axis (the "steering wheel" roll).
-                p = Math.atan2(acc.z, acc.y) * (180 / Math.PI);
-                if (orientation === -90) p = -p; 
-                currentPitch = -(p + 90);
+                /* LANDSCAPE FILTER:
+                In landscape, gamma is your forward/back tilt (Pitch).
+                Beta is your side-to-side rotation (Roll).
+                We use atan(tan(gamma) / cos(beta)) to find the true pitch 
+                relative to the horizon, effectively 'flattening' the roll.
+                */
+                const pitchRad = Math.atan(Math.tan(gamma) / Math.cos(beta));
+                p = pitchRad * (180 / Math.PI);
+                
+                // Invert for Landscape-Right
+                if (orientation === -90) p = -p;
+                currentPitch = -p;
             } else {
-                // PORTRAIT: Use Z and X.
-                p = Math.atan2(acc.z, acc.x) * (180 / Math.PI);
-                currentPitch = -(p + 90);
+                /* PORTRAIT FILTER */
+                const pitchRad = Math.atan(Math.tan(beta) / Math.cos(gamma));
+                p = (pitchRad * (180 / Math.PI)) - 90;
+                currentPitch = -p;
             }
-            
+
             pitchDisp.innerText = currentPitch.toFixed(1);
             updateHUD();
         }
 
+        // In the start() function, revert back to deviceorientation:
         async function start() {
             try {
-                statusDisp.innerText = "INITIALIZING...";
-
-                // 1. Request Camera Access
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment', width: { ideal: 1280 } }
                 });
                 document.getElementById('camera-feed').srcObject = stream;
 
-                // 2. Request Motion Sensor Permission (iOS 13+)
-                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
-                    const permission = await DeviceMotionEvent.requestPermission();
+                if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    const permission = await DeviceOrientationEvent.requestPermission();
                     if (permission === 'granted') {
-                        window.addEventListener('devicemotion', handleMotion);
-                    } else {
-                        alert("Permission denied for sensors.");
+                        window.addEventListener('deviceorientation', handleMotion);
                     }
                 } else {
-                    // Android or non-iOS
-                    window.addEventListener('devicemotion', handleMotion);
+                    window.addEventListener('deviceorientation', handleMotion);
                 }
 
                 startBtn.style.display = 'none';
                 statusDisp.innerText = "ACTIVE";
             } catch (err) {
                 alert("Setup error: " + err.message);
-                statusDisp.innerText = "ERROR";
             }
         }
-
-        startBtn.addEventListener('click', start);
-        document.querySelectorAll('input').forEach(i => i.addEventListener('input', updateHUD));
     </script>
 </body>
 </html>
