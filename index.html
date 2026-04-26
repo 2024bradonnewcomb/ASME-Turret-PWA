@@ -90,45 +90,29 @@
         let currentPitch = 0;
         const G = 9.806;
 
-        function solveBallistics(x, y, v) {
-            const v2 = v * v;
-            const root = Math.pow(v, 4) - G * (G * (x * x) + 2 * y * v2);
-            if (root < 0) return null;
-            return Math.atan((v2 - Math.sqrt(root)) / (G * x)) * (180 / Math.PI);
-        }
-
         function updateHUD() {
             const dH = parseFloat(document.getElementById('in-dist').value) || 1;
             const v0 = parseFloat(document.getElementById('in-vel').value) || 1;
             const camUp = parseFloat(document.getElementById('in-camy').value) || 0;
             const vFOV = parseFloat(document.getElementById('in-fov').value) || 50;
 
-            // 1. How long does the bullet take to get there? (t = d / v)
             const timeOfFlight = dH / v0;
-
-            // 2. How far does it fall in that time? (h = 0.5 * g * t^2)
             const gravityDrop = 0.5 * G * Math.pow(timeOfFlight, 2);
-
-            // 3. Total vertical offset (Gravity drop + Camera height difference)
-            // We ADD camUp because the camera being higher makes the impact look even lower
             const totalDrop = gravityDrop + camUp;
 
-            // 4. Convert that linear drop into an angle (theta = arctan(drop / distance))
             const dropAngleRad = Math.atan2(totalDrop, dH);
             const dropAngleDeg = dropAngleRad * (180 / Math.PI);
 
-            // 5. Map to screen
-            // We use '+' to move the dot DOWN (higher % from top)
             const halfFOV = (vFOV / 2) * (Math.PI / 180);
             const screenOffset = (Math.tan(dropAngleRad) / Math.tan(halfFOV)) * 50;
             
-            const finalY = 50 + screenOffset; // The '+' makes it sit below center
+            const finalY = 50 + screenOffset;
 
             if (finalY > 100 || finalY < 0) {
                 statusDisp.innerText = "IMPACT OFF SCREEN";
                 dot.style.display = "none";
             } else {
-                statusDisp.innerText = "CALCULATED";
+                statusDisp.innerText = "ACTIVE";
                 dot.style.display = "block";
                 dot.style.top = `${finalY}%`;
                 reqDisp.innerText = (currentPitch + dropAngleDeg).toFixed(1);
@@ -140,64 +124,57 @@
             if (!acc) return;
 
             let p = 0;
+            // Cross-browser orientation check
             const orientation = window.orientation || (screen.orientation && screen.orientation.angle) || 0;
 
-            // We calculate pitch using the relationship between the Z-axis (depth) 
-            // and the Y or X axis depending on how you hold the phone.
             if (orientation === 90 || orientation === -90) {
-                // LANDSCAPE: Pitch is the angle between Gravity and the short side (Y)
-                // This math isolates the "tilt" and ignores the "roll" (X-axis)
+                // LANDSCAPE: Use Z and Y to find pitch.
+                // This ignores the X axis (the "steering wheel" roll).
                 p = Math.atan2(acc.z, acc.y) * (180 / Math.PI);
-                
-                // Adjust for Landscape-Left vs Landscape-Right
                 if (orientation === -90) p = -p; 
+                currentPitch = -(p + 90);
             } else {
-                // PORTRAIT: Pitch is the angle between Gravity and the long side (X)
+                // PORTRAIT: Use Z and X.
                 p = Math.atan2(acc.z, acc.x) * (180 / Math.PI);
+                currentPitch = -(p + 90);
             }
-
-            // Normalizing so 0 is level with the horizon
-            currentPitch = -(p + 90); 
+            
             pitchDisp.innerText = currentPitch.toFixed(1);
             updateHUD();
         }
 
-        // Update the sensor listener in your start() function:
-        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-            const permission = await DeviceMotionEvent.requestPermission();
-            if (permission === 'granted') {
-                window.addEventListener('devicemotion', handleMotion);
-            }
-        } else {
-            window.addEventListener('devicemotion', handleMotion);
-        }
         async function start() {
             try {
-                // 1. Camera
+                statusDisp.innerText = "INITIALIZING...";
+
+                // 1. Request Camera Access
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment', width: { ideal: 1280 } }
                 });
                 document.getElementById('camera-feed').srcObject = stream;
 
-                // 2. Sensors (The iOS Handshake)
-                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    const permission = await DeviceOrientationEvent.requestPermission();
+                // 2. Request Motion Sensor Permission (iOS 13+)
+                if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+                    const permission = await DeviceMotionEvent.requestPermission();
                     if (permission === 'granted') {
-                        window.addEventListener('deviceorientation', handleMotion);
+                        window.addEventListener('devicemotion', handleMotion);
+                    } else {
+                        alert("Permission denied for sensors.");
                     }
                 } else {
-                    window.addEventListener('deviceorientation', handleMotion);
+                    // Android or non-iOS
+                    window.addEventListener('devicemotion', handleMotion);
                 }
 
                 startBtn.style.display = 'none';
                 statusDisp.innerText = "ACTIVE";
             } catch (err) {
                 alert("Setup error: " + err.message);
+                statusDisp.innerText = "ERROR";
             }
         }
 
         startBtn.addEventListener('click', start);
-        // Live updates when changing numbers
         document.querySelectorAll('input').forEach(i => i.addEventListener('input', updateHUD));
     </script>
 </body>
