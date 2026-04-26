@@ -136,26 +136,41 @@
         }
 
         function handleMotion(e) {
+            const acc = e.accelerationIncludingGravity;
+            if (!acc) return;
+
             let p = 0;
-            // Check orientation: 90/-90 is landscape (phone held like a camera)
             const orientation = window.orientation || (screen.orientation && screen.orientation.angle) || 0;
-            
+
+            // We calculate pitch using the relationship between the Z-axis (depth) 
+            // and the Y or X axis depending on how you hold the phone.
             if (orientation === 90 || orientation === -90) {
-                // LANDSCAPE: 'gamma' is forward/back tilt. 
-                // We ignore 'beta' (which would be side-to-side tilting of the screen).
-                p = e.gamma; 
+                // LANDSCAPE: Pitch is the angle between Gravity and the short side (Y)
+                // This math isolates the "tilt" and ignores the "roll" (X-axis)
+                p = Math.atan2(acc.z, acc.y) * (180 / Math.PI);
+                
+                // Adjust for Landscape-Left vs Landscape-Right
+                if (orientation === -90) p = -p; 
             } else {
-                // PORTRAIT: 'beta' is forward/back tilt.
-                // We ignore 'gamma' (which would be side-to-side tilting).
-                p = e.beta - 90; 
+                // PORTRAIT: Pitch is the angle between Gravity and the long side (X)
+                p = Math.atan2(acc.z, acc.x) * (180 / Math.PI);
             }
-            
-            // Invert the value so tilting UP increases the pitch number
-            currentPitch = -p; 
+
+            // Normalizing so 0 is level with the horizon
+            currentPitch = -(p + 90); 
             pitchDisp.innerText = currentPitch.toFixed(1);
             updateHUD();
         }
 
+        // Update the sensor listener in your start() function:
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+            const permission = await DeviceMotionEvent.requestPermission();
+            if (permission === 'granted') {
+                window.addEventListener('devicemotion', handleMotion);
+            }
+        } else {
+            window.addEventListener('devicemotion', handleMotion);
+        }
         async function start() {
             try {
                 // 1. Camera
