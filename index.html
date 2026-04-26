@@ -38,13 +38,13 @@
             position: absolute;
             top: 50%;
             left: 50%;
-            width: 20px;
-            height: 20px;
+            width: 8px;
+            height: 8px;
             background: #ff3e3e;
-            border: 2px solid #fff;
+            border: 1px solid #fff;
             border-radius: 50%;
             transform: translate(-50%, -50%);
-            box-shadow: 0 0 10px #ff3e3e;
+            box-shadow: 0 0 6px #ff3e3e;
             pointer-events: none;
         }
 
@@ -84,40 +84,41 @@
         #data-panel {
             margin-top: 20px;
             text-align: center;
-            font-size: 14px;
+            font-size: 12px;
             background: rgba(0, 255, 65, 0.1);
             padding: 15px;
             border-radius: 5px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
+            max-width: 300px;
         }
 
-        .input-group {
+        .input-row {
             display: flex;
-            align-items: center;
-            justify-content: center;
             gap: 10px;
+            align-items: center;
         }
 
-        .input-group label {
-            min-width: 60px;
+        .input-row label {
+            min-width: 80px;
+            font-size: 11px;
         }
 
         input[type="number"] {
             background: #000;
             color: #00ff41;
             border: 1px solid #00ff41;
-            padding: 5px 10px;
+            padding: 3px 6px;
             font-family: 'Courier New', Courier, monospace;
-            font-size: 14px;
-            width: 80px;
+            font-size: 11px;
+            width: 60px;
             text-align: center;
         }
 
         input[type="number"]:focus {
             outline: none;
-            box-shadow: 0 0 5px #00ff41;
+            box-shadow: 0 0 3px #00ff41;
         }
 
         button {
@@ -141,15 +142,36 @@
     </div>
 
     <div id="data-panel">
-        <div class="input-group">
+        <div class="input-row">
             <label for="dist-x">DIST X:</label>
             <input type="number" id="dist-x" value="5" step="0.1" min="0">m
         </div>
-        <div class="input-group">
+        <div class="input-row">
             <label for="dist-y">DIST Y:</label>
             <input type="number" id="dist-y" value="0" step="0.1">m
         </div>
+        <div class="input-row">
+            <label for="barrel-len">BARREL:</label>
+            <input type="number" id="barrel-len" value="2" step="0.1" min="0">m
+        </div>
+        <div class="input-row">
+            <label for="cam-up">CAM UP:</label>
+            <input type="number" id="cam-up" value="0.5" step="0.1">m
+        </div>
+        <div class="input-row">
+            <label for="cam-fwd">CAM FWD:</label>
+            <input type="number" id="cam-fwd" value="0.2" step="0.1">m
+        </div>
+        <div class="input-row">
+            <label for="cam-side">CAM SIDE:</label>
+            <input type="number" id="cam-side" value="0" step="0.1">m
+        </div>
+        <div class="input-row">
+            <label for="muzzle-vel">MUZZLE V:</label>
+            <input type="number" id="muzzle-vel" value="300" step="10" min="0">m/s
+        </div>
         <div>ELEVATION: <span id="val-elevation">0</span>°</div>
+        <div>ADJ ELEV: <span id="val-adj-elevation">0</span>°</div>
         <div>HEIGHT Z: <span id="val-height">0</span>m</div>
     </div>
 
@@ -159,28 +181,93 @@
         const cameraFeed = document.getElementById('camera-feed');
         const aimingDot = document.getElementById('aiming-dot');
         const elevationDisplay = document.getElementById('val-elevation');
+        const adjElevationDisplay = document.getElementById('val-adj-elevation');
         const heightDisplay = document.getElementById('val-height');
         const distXInput = document.getElementById('dist-x');
         const distYInput = document.getElementById('dist-y');
+        const barrelLenInput = document.getElementById('barrel-len');
+        const camUpInput = document.getElementById('cam-up');
+        const camFwdInput = document.getElementById('cam-fwd');
+        const camSideInput = document.getElementById('cam-side');
+        const muzzleVelInput = document.getElementById('muzzle-vel');
         const startBtn = document.getElementById('start-btn');
 
         let currentElevation = 0;
         let stream = null;
+        const GRAVITY = 9.81; // m/s²
 
-        // Calculate height using distance and elevation angle
-        function calculateHeight() {
+        // Calculate height and adjusted aiming angle
+        function calculateTrajectory() {
             const distX = parseFloat(distXInput.value) || 0;
             const distY = parseFloat(distYInput.value) || 0;
-            const horizontalDistance = Math.sqrt(distX * distX + distY * distY);
+            const barrelLen = parseFloat(barrelLenInput.value) || 0;
+            const camUp = parseFloat(camUpInput.value) || 0;
+            const camFwd = parseFloat(camFwdInput.value) || 0;
+            const camSide = parseFloat(camSideInput.value) || 0;
+            const muzzleVel = parseFloat(muzzleVelInput.value) || 0;
+
+            // Calculate horizontal distance from turret pivot to target
+            const horizontalDist = Math.sqrt(distX * distX + distY * distY);
             
-            if (horizontalDistance === 0) {
+            if (horizontalDist === 0) {
                 heightDisplay.innerText = "0.0";
+                adjElevationDisplay.innerText = "0.0";
                 return;
             }
+
+            // Target height relative to camera
+            const targetHeight = horizontalDist * Math.tan(currentElevation * Math.PI / 180);
             
-            // Height = horizontal_distance * tan(elevation_angle)
-            const height = horizontalDistance * Math.tan(currentElevation * Math.PI / 180);
-            heightDisplay.innerText = height.toFixed(2);
+            // Camera position relative to turret pivot
+            // Assuming pivot is at (0,0,0), camera is offset
+            const camX = camFwd;  // Forward/back
+            const camY = camSide; // Left/right  
+            const camZ = camUp;   // Up/down
+
+            // Target position relative to pivot (accounting for camera offset)
+            const targetX = distX - camX;
+            const targetY = distY - camY; 
+            const targetZ = targetHeight - camZ;
+
+            // Distance from pivot to target
+            const pivotToTargetDist = Math.sqrt(targetX * targetX + targetY * targetY + targetZ * targetZ);
+            
+            // Calculate required firing angle using ballistic trajectory
+            let requiredAngle = 0;
+            if (muzzleVel > 0) {
+                // Simplified trajectory calculation
+                // For low angles, use: angle = arcsin(g * d / v²) / 2
+                const v2 = muzzleVel * muzzleVel;
+                const gd = GRAVITY * pivotToTargetDist;
+                
+                if (gd < v2) {
+                    requiredAngle = Math.asin(gd / v2) * 180 / Math.PI / 2;
+                    
+                    // Adjust for height difference
+                    if (targetZ !== 0) {
+                        const heightAngle = Math.atan2(targetZ, Math.sqrt(targetX * targetX + targetY * targetY)) * 180 / Math.PI;
+                        requiredAngle += heightAngle;
+                    }
+                } else {
+                    requiredAngle = 45; // Maximum range angle
+                }
+            } else {
+                // No muzzle velocity - direct line of sight
+                requiredAngle = Math.atan2(targetZ, Math.sqrt(targetX * targetX + targetY * targetY)) * 180 / Math.PI;
+            }
+
+            // The adjusted elevation is the angle the camera should point to
+            // so that the turret barrel will be at the required firing angle
+            const cameraAngle = requiredAngle; // Simplified - in reality would account for barrel offset
+            
+            // Move aiming dot based on elevation adjustment
+            const currentAdjElevation = parseFloat(adjElevationDisplay.innerText) || 0;
+            const elevationDiff = currentAdjElevation - currentElevation;
+            
+            // Move dot vertically based on elevation difference
+            // Scale: 1 degree = 2% movement
+            const dotY = 50 - (elevationDiff * 2);
+            aimingDot.style.top = `${Math.max(0, Math.min(100, dotY))}%`;
         }
 
         function handleOrientation(event) {
@@ -193,7 +280,7 @@
             currentElevation = event.beta - 90;
             
             elevationDisplay.innerText = currentElevation.toFixed(1);
-            calculateHeight();
+            calculateTrajectory();
         }
 
         async function startCamera() {
@@ -230,9 +317,14 @@
             }
         }
 
-        // Update height when distance inputs change
-        distXInput.addEventListener('input', calculateHeight);
-        distYInput.addEventListener('input', calculateHeight);
+        // Update trajectory when any input changes
+        distXInput.addEventListener('input', calculateTrajectory);
+        distYInput.addEventListener('input', calculateTrajectory);
+        barrelLenInput.addEventListener('input', calculateTrajectory);
+        camUpInput.addEventListener('input', calculateTrajectory);
+        camFwdInput.addEventListener('input', calculateTrajectory);
+        camSideInput.addEventListener('input', calculateTrajectory);
+        muzzleVelInput.addEventListener('input', calculateTrajectory);
 
         startBtn.addEventListener('click', startCamera);
 
