@@ -188,9 +188,9 @@
                 return;
             }
 
-            // Beta is pitch (-180 to 180), negative values mean looking up
-            // For elevation, we want positive values when looking up
-            currentElevation = -event.beta; // Invert so positive is up
+            // Beta is pitch (-180 to 180)
+            // Adjust so vertical position (beta = 90) is 0 elevation
+            currentElevation = event.beta - 90;
             
             elevationDisplay.innerText = currentElevation.toFixed(1);
             calculateHeight();
