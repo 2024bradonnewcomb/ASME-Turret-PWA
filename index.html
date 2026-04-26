@@ -70,6 +70,40 @@
             <div>STATUS: <span id="status">OFFLINE</span></div>
         </div>
 
+        <style>
+            /* New styles for the preset grid */
+            .presets-container {
+                display: grid;
+                grid-template-columns: repeat(4, 1fr);
+                gap: 5px;
+                margin-top: 10px;
+            }
+            .preset-btn {
+                background: rgba(0, 255, 65, 0.2);
+                border: 1px solid var(--neon);
+                color: var(--neon);
+                padding: 8px 2px;
+                font-size: 10px;
+                cursor: pointer;
+                font-family: inherit;
+            }
+            .preset-btn:active {
+                background: var(--neon);
+                color: #000;
+            }
+        </style>
+
+        <div id="presets" class="presets-container" style="display: none;">
+            <button class="preset-btn" onclick="setDist(1.52)">Cent GR</button>
+            <button class="preset-btn" onclick="setDist(2.62)">Side GR</button>
+            <button class="preset-btn" onclick="setDist(3.23)">Side YE</button>
+            <button class="preset-btn" onclick="setDist(5.03)">Cent BL</button>
+            <button class="preset-btn" onclick="setDist(5.00)">Side BL</button>
+            <button class="preset-btn" onclick="setDist(6.18)">Side PU</button>
+            <button class="preset-btn" onclick="setDist(30)">30m</button>
+            <button class="preset-btn" onclick="setDist(50)">50m</button>
+        </div>
+
         <div class="input-grid">
             <div class="field"><label>DIST(m)</label><input type="number" id="in-dist" value="20"></div>
             <div class="field"><label>VEL(m/s)</label><input type="number" id="in-vel" value="19.2"></div>
@@ -186,6 +220,16 @@
 
         startBtn.addEventListener('click', start);
         document.querySelectorAll('input').forEach(i => i.addEventListener('input', updateHUD));
+
+        // 1. Function to set distance and refresh HUD
+        function setDist(val) {
+            document.getElementById('in-dist').value = val;
+            updateHUD(); // Recalculate ballistics immediately
+        }
+
+        // 2. Add this line inside your existing async function start() 
+        // right after 'startBtn.style.display = "none";'
+        document.getElementById('presets').style.display = 'grid';
     </script>
 </body>
 </html>
