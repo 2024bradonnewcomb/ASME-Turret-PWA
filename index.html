@@ -72,9 +72,9 @@
 
         <div class="input-grid">
             <div class="field"><label>DIST(m)</label><input type="number" id="in-dist" value="20"></div>
-            <div class="field"><label>VEL(m/s)</label><input type="number" id="in-vel" value="150"></div>
+            <div class="field"><label>VEL(m/s)</label><input type="number" id="in-vel" value="19.2"></div>
             <div class="field"><label>CAM-Y(m)</label><input type="number" id="in-camy" value="0.2"></div>
-            <div class="field"><label>FOV(°)</label><input type="number" id="in-fov" value="50"></div>
+            <div class="field"><label>FOV(°)</label><input type="number" id="in-fov" value="82"></div>
         </div>
 
         <button id="start-btn">Initialize System</button>
@@ -103,46 +103,54 @@
             const camUp = parseFloat(document.getElementById('in-camy').value) || 0;
             const vFOV = parseFloat(document.getElementById('in-fov').value) || 50;
 
-            // Calculate height of whatever is in the center crosshair
-            const targetHeightRelCam = dH * Math.tan(currentPitch * Math.PI / 180);
+            // 1. How long does the bullet take to get there? (t = d / v)
+            const timeOfFlight = dH / v0;
+
+            // 2. How far does it fall in that time? (h = 0.5 * g * t^2)
+            const gravityDrop = 0.5 * G * Math.pow(timeOfFlight, 2);
+
+            // 3. Total vertical offset (Gravity drop + Camera height difference)
+            // We ADD camUp because the camera being higher makes the impact look even lower
+            const totalDrop = gravityDrop + camUp;
+
+            // 4. Convert that linear drop into an angle (theta = arctan(drop / distance))
+            const dropAngleRad = Math.atan2(totalDrop, dH);
+            const dropAngleDeg = dropAngleRad * (180 / Math.PI);
+
+            // 5. Map to screen
+            // We use '+' to move the dot DOWN (higher % from top)
+            const halfFOV = (vFOV / 2) * (Math.PI / 180);
+            const screenOffset = (Math.tan(dropAngleRad) / Math.tan(halfFOV)) * 50;
             
-            // Adjust for barrel position
-            const x = dH; 
-            const y = targetHeightRelCam + camUp;
+            const finalY = 50 + screenOffset; // The '+' makes it sit below center
 
-            const sol = solveBallistics(x, y, v0);
-
-            if (sol === null) {
-                statusDisp.innerText = "OUT OF RANGE";
-                statusDisp.className = "out-of-range";
+            if (finalY > 100 || finalY < 0) {
+                statusDisp.innerText = "IMPACT OFF SCREEN";
                 dot.style.display = "none";
             } else {
-                statusDisp.innerText = "LOCKED";
-                statusDisp.className = "";
+                statusDisp.innerText = "CALCULATED";
                 dot.style.display = "block";
-                reqDisp.innerText = sol.toFixed(1);
-
-                // Map angle difference to screen Y
-                const angleDiff = sol - currentPitch;
-                const halfFOV = (vFOV / 2) * (Math.PI / 180);
-                const diffRad = angleDiff * (Math.PI / 180);
-                
-                const screenOffset = (Math.tan(diffRad) / Math.tan(halfFOV)) * 50;
-                dot.style.top = `${50 - screenOffset}%`;
+                dot.style.top = `${finalY}%`;
+                reqDisp.innerText = (currentPitch + dropAngleDeg).toFixed(1);
             }
         }
 
         function handleMotion(e) {
-            // Logic for Landscape orientation: 
-            // In landscape, 'gamma' or 'beta' can swap depending on device.
-            // We'll use a calculation that works when the phone is held like a camera.
             let p = 0;
-            if (window.orientation === 90 || window.orientation === -90) {
-                p = e.gamma; // Landscape pitch
+            // Check orientation: 90/-90 is landscape (phone held like a camera)
+            const orientation = window.orientation || (screen.orientation && screen.orientation.angle) || 0;
+            
+            if (orientation === 90 || orientation === -90) {
+                // LANDSCAPE: 'gamma' is forward/back tilt. 
+                // We ignore 'beta' (which would be side-to-side tilting of the screen).
+                p = e.gamma; 
             } else {
-                p = e.beta - 90; // Portrait pitch
+                // PORTRAIT: 'beta' is forward/back tilt.
+                // We ignore 'gamma' (which would be side-to-side tilting).
+                p = e.beta - 90; 
             }
             
+            // Invert the value so tilting UP increases the pitch number
             currentPitch = -p; 
             pitchDisp.innerText = currentPitch.toFixed(1);
             updateHUD();
