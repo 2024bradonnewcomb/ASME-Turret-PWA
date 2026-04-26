@@ -86,10 +86,21 @@
     </div>
 
     <button id="start-btn">Initialize Sensors</button>
+    <button id="zero-btn" disabled>Zero Sensors</button>
 
     <script>
         const log = document.getElementById('val-pitch'); // Borrowing this for quick logs
         const dot = document.getElementById('target-dot');
+        
+        // Zero offset variables
+        let zeroPitch = 0;
+        let zeroYaw = 0;
+        let zeroRoll = 0;
+        
+        // Current raw sensor values
+        let currentPitch = 0;
+        let currentYaw = 0;
+        let currentRoll = 0;
 
         function handleOrientation(event) {
             // If these values are null, the sensor exists but isn't sending data
@@ -101,8 +112,13 @@
             // Alpha = Yaw (0 to 360)
             // Beta = Pitch (-180 to 180)
             // Gamma = Roll (-90 to 90)
-            const pitch = event.beta;
-            const yaw = event.alpha;
+            currentPitch = event.beta;
+            currentYaw = event.alpha;
+            currentRoll = event.gamma;
+            
+            const pitch = event.beta - zeroPitch;
+            const yaw = event.alpha - zeroYaw;
+            const roll = event.gamma - zeroRoll;
 
             // Update the UI
             document.getElementById('val-pitch').innerText = pitch.toFixed(1);
@@ -130,9 +146,22 @@
                     window.addEventListener('deviceorientation', handleOrientation);
                 }
                 document.getElementById('start-btn').innerText = "SENSORS ACTIVE";
+                document.getElementById('zero-btn').disabled = false;
             } catch (error) {
                 alert("Error initializing sensors: " + error);
             }
+        };
+
+        document.getElementById('zero-btn').onclick = () => {
+            // Set zero offsets to current raw sensor values
+            zeroPitch = currentPitch;
+            zeroYaw = currentYaw;
+            zeroRoll = currentRoll;
+            document.getElementById('val-pitch').innerText = "0.0";
+            document.getElementById('zero-btn').innerText = "SENSORS ZEROED";
+            setTimeout(() => {
+                document.getElementById('zero-btn').innerText = "Zero Sensors";
+            }, 2000);
         };
     </script>
 </body>
