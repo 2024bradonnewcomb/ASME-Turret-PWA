@@ -125,16 +125,28 @@
         const G = 9.806;
 
         function updateHUD() {
-            const dH = parseFloat(document.getElementById('in-dist').value) || 1;
+            // 1. Get Inputs
+            const dR = parseFloat(document.getElementById('in-dist').value) || 1; // Slant Range
             const v0 = parseFloat(document.getElementById('in-vel').value) || 1;
             const camUp = parseFloat(document.getElementById('in-camy').value) || 0;
             const vFOV = parseFloat(document.getElementById('in-fov').value) || 50;
 
-            const timeOfFlight = dH / v0;
-            const gravityDrop = 0.5 * G * Math.pow(timeOfFlight, 2);
+            // 2. Convert current pitch to Radians
+            const pitchRad = currentPitch * (Math.PI / 180);
+
+            // 3. Inclined Time of Flight 
+            // We use the slant range (dR) because that is the distance to target
+            const timeOfFlight = dR / v0;
+
+            // 4. Compensated Gravity Drop
+            // Gravity drop only acts perpendicular to the bore at high angles
+            const gravityDrop = 0.5 * G * Math.pow(timeOfFlight, 2) * Math.cos(pitchRad);
+            
+            // 5. Total Vertical Displacement (Parallax + Adjusted Drop)
             const totalDrop = gravityDrop + camUp;
 
-            const dropAngleRad = Math.atan2(totalDrop, dH);
+            // 6. Angular Mapping (Rectilinear Projection)
+            const dropAngleRad = Math.atan2(totalDrop, dR);
             const dropAngleDeg = dropAngleRad * (180 / Math.PI);
 
             const halfFOV = (vFOV / 2) * (Math.PI / 180);
@@ -142,13 +154,17 @@
             
             const finalY = 50 + screenOffset;
 
+            // 7. Update UI
             if (finalY > 100 || finalY < 0) {
-                statusDisp.innerText = "IMPACT OFF SCREEN";
+                statusDisp.innerText = "OUT OF VIEW";
                 dot.style.display = "none";
             } else {
                 statusDisp.innerText = "ACTIVE";
                 dot.style.display = "block";
                 dot.style.top = `${finalY}%`;
+                
+                // REQ is the angle you NEED to be at to hit the target.
+                // It helps you see how much 'holdover' you are currently applying.
                 reqDisp.innerText = (currentPitch + dropAngleDeg).toFixed(1);
             }
         }
