@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Turret HUD</title>
+    <link rel="manifest" href="manifest.json">
+    <style>
+        body {
+            margin: 0;
+            background: #0a0a0a;
+            color: #00ff41;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        #hud-container {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border: 2px solid #00ff4133;
+            border-radius: 50%;
+        }
+
+        /* Fixed Crosshair */
+        .crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 40px;
+            border: 2px solid #00ff41;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        /* Target Dot - The Guidance */
+        #target-dot {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background: #ff3e3e;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: top 0.1s ease-out, left 0.1s ease-out;
+            box-shadow: 0 0 15px #ff3e3e;
+        }
+
+        #data-panel {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 14px;
+            background: rgba(0, 255, 65, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        button {
+            background: #00ff41;
+            color: #000;
+            border: none;
+            padding: 15px 30px;
+            font-weight: bold;
+            margin-top: 20px;
+            text-transform: uppercase;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="hud-container">
+        <div class="crosshair"></div>
+        <div id="target-dot" style="top: 50%; left: 50%;"></div>
+    </div>
+
+    <div id="data-panel">
+        <div>PITCH: <span id="val-pitch">0</span>°</div>
+        <div>REQD: <span id="val-req">0</span>°</div>
+        <div>DIST: <span id="val-dist">5</span>m</div>
+    </div>
+
+    <button id="start-btn">Initialize Sensors</button>
+
+    <script>
+        const log = document.getElementById('val-pitch'); // Borrowing this for quick logs
+        const dot = document.getElementById('target-dot');
+
+        function handleOrientation(event) {
+            // If these values are null, the sensor exists but isn't sending data
+            if (event.beta === null || event.alpha === null) {
+                console.warn("Sensors detected but returning null data.");
+                return;
+            }
+
+            // Alpha = Yaw (0 to 360)
+            // Beta = Pitch (-180 to 180)
+            // Gamma = Roll (-90 to 90)
+            const pitch = event.beta;
+            const yaw = event.alpha;
+
+            // Update the UI
+            document.getElementById('val-pitch').innerText = pitch.toFixed(1);
+            
+            // Move the dot visually to prove it's working
+            // This moves the dot based on the phone's tilt
+            const yPos = 50 + (pitch * 0.5); 
+            const xPos = 50 + (event.gamma * 0.5);
+            dot.style.top = `${yPos}%`;
+            dot.style.left = `${xPos}%`;
+        }
+
+        document.getElementById('start-btn').onclick = async () => {
+            try {
+                // Feature detection for iOS 13+
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    const response = await DeviceOrientationEvent.requestPermission();
+                    if (response === 'granted') {
+                        window.addEventListener('deviceorientation', handleOrientation);
+                    } else {
+                        alert("Permission denied. Check your browser settings.");
+                    }
+                } else {
+                    // Non-iOS devices or older versions
+                    window.addEventListener('deviceorientation', handleOrientation);
+                }
+                document.getElementById('start-btn').innerText = "SENSORS ACTIVE";
+            } catch (error) {
+                alert("Error initializing sensors: " + error);
+            }
+        };
+    </script>
+</body>
+</html>
