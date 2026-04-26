@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Turret HUD</title>
     <link rel="manifest" href="manifest.json">
     <style>
@@ -16,15 +16,20 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            height: 100dvh; /* Use dynamic viewport height for mobile */
+            max-height: 100dvh;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+            box-sizing: border-box;
         }
 
         #camera-container {
             position: relative;
             width: 100vw;
-            height: 60vh;
+            height: 60dvh; /* Use dynamic viewport height */
             background: #000;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         #camera-feed {
@@ -82,16 +87,19 @@
         }
 
         #data-panel {
-            margin-top: 20px;
+            margin-top: 10px;
             text-align: center;
-            font-size: 12px;
+            font-size: 11px;
             background: rgba(0, 255, 65, 0.1);
-            padding: 15px;
+            padding: 10px;
             border-radius: 5px;
             display: flex;
             flex-direction: column;
-            gap: 8px;
+            gap: 6px;
             max-width: 300px;
+            flex-shrink: 0;
+            overflow-y: auto;
+            max-height: 35dvh;
         }
 
         .input-row {
@@ -125,11 +133,13 @@
             background: #00ff41;
             color: #000;
             border: none;
-            padding: 15px 30px;
+            padding: 12px 24px;
             font-weight: bold;
-            margin-top: 20px;
+            margin-top: 10px;
             text-transform: uppercase;
             cursor: pointer;
+            font-size: 12px;
+            flex-shrink: 0;
         }
     </style>
 </head>
