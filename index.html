@@ -2,262 +2,180 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Turret HUD Pro</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Turret HUD v2</title>
     <style>
+        :root { --neon: #00ff41; --danger: #ff3e3e; }
         body {
-            margin: 0;
-            background: #0a0a0a;
-            color: #00ff41;
-            font-family: 'Courier New', Courier, monospace;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            height: 100dvh;
-            box-sizing: border-box;
+            margin: 0; background: #000; color: var(--neon);
+            font-family: 'Courier New', monospace; overflow: hidden;
+            display: flex; flex-direction: column; height: 100dvh;
         }
 
-        #camera-container {
-            position: relative;
-            width: 100vw;
-            height: 60dvh;
-            background: #000;
-            overflow: hidden;
-            flex-shrink: 0;
+        /* Viewfinder Section */
+        #viewport {
+            position: relative; width: 100%; height: 65dvh;
+            background: #050505; overflow: hidden; border-bottom: 2px solid var(--neon);
         }
+        #camera-feed { width: 100%; height: 100%; object-fit: cover; }
 
-        #camera-feed {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
+        /* Reticles */
+        .center-cross {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px; border: 1px solid rgba(0, 255, 65, 0.4);
+            transform: translate(-50%, -50%); pointer-events: none;
         }
-
-        /* Aiming Dot (Where to point the barrel) */
         #aiming-dot {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 12px;
-            height: 12px;
-            background: transparent;
-            border: 2px solid #ff3e3e;
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            box-shadow: 0 0 8px #ff3e3e;
-            pointer-events: none;
-            transition: opacity 0.2s;
+            position: absolute; top: 50%; left: 50%;
+            width: 14px; height: 14px; border: 2px solid var(--danger);
+            border-radius: 50%; transform: translate(-50%, -50%);
+            box-shadow: 0 0 10px var(--danger); pointer-events: none;
+            z-index: 10; display: none;
         }
 
-        /* Center Crosshair (Camera bore sight) */
-        .crosshair {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            width: 30px;
-            height: 30px;
-            border: 1px solid rgba(0, 255, 65, 0.5);
-            transform: translate(-50%, -50%);
-            pointer-events: none;
+        /* Controls Section */
+        #ui-panel {
+            flex: 1; padding: 10px; display: flex; flex-direction: column; gap: 8px;
+            background: #0a0a0a; font-size: 12px; overflow-y: auto;
         }
-
-        #data-panel {
-            flex: 1;
-            width: 100%;
-            background: #000;
-            padding: 10px;
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            font-size: 10px;
-            overflow-y: auto;
-            border-top: 2px solid #00ff41;
-        }
-
-        .input-row { display: flex; align-items: center; justify-content: space-between; }
-        input {
-            background: #111;
-            color: #00ff41;
-            border: 1px solid #00ff41;
-            width: 50px;
-            font-size: 12px;
-            text-align: center;
-        }
-
-        .status-box {
-            grid-column: span 2;
-            background: rgba(0, 255, 65, 0.1);
-            padding: 5px;
-            border: 1px solid #00ff41;
-            text-transform: uppercase;
-        }
-
-        button {
-            grid-column: span 2;
-            background: #00ff41;
-            color: #000;
-            border: none;
-            padding: 10px;
-            font-weight: bold;
-            cursor: pointer;
-        }
+        .stats { display: flex; justify-content: space-between; padding: 5px; background: rgba(0,255,65,0.1); border-radius: 4px; }
         
-        .out-of-range { color: #ff3e3e; font-weight: bold; }
+        .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .field { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #222; padding: 2px 0; }
+        
+        input {
+            background: #000; color: var(--neon); border: 1px solid var(--neon);
+            width: 55px; text-align: center; font-family: inherit;
+        }
+
+        #start-btn {
+            background: var(--neon); color: #000; border: none; padding: 15px;
+            font-weight: bold; text-transform: uppercase; cursor: pointer; width: 100%;
+        }
+        .out-of-range { color: var(--danger); }
     </style>
 </head>
 <body>
 
-    <div id="camera-container">
+    <div id="viewport">
         <video id="camera-feed" autoplay playsinline></video>
-        <div class="crosshair"></div>
+        <div class="center-cross"></div>
         <div id="aiming-dot"></div>
     </div>
 
-    <div id="data-panel">
-        <div class="status-box">
-            System: <span id="sys-status">Standby</span><br>
-            Target Z: <span id="val-height">0</span>m | 
-            Req. Pitch: <span id="val-adj-elevation">0</span>°
+    <div id="ui-panel">
+        <div class="stats">
+            <div>PITCH: <span id="val-pitch">0</span>°</div>
+            <div>REQ: <span id="val-req">--</span>°</div>
+            <div>STATUS: <span id="status">OFFLINE</span></div>
         </div>
 
-        <div class="input-row">
-            <label>DIST H (m):</label>
-            <input type="number" id="dist-h" value="50" step="1">
-        </div>
-        <div class="input-row">
-            <label>MUZZLE V (m/s):</label>
-            <input type="number" id="muzzle-vel" value="100" step="5">
-        </div>
-        <div class="input-row">
-            <label>CAM UP (m):</label>
-            <input type="number" id="cam-up" value="0.2" step="0.05">
-        </div>
-        <div class="input-row">
-            <label>CAM FWD (m):</label>
-            <input type="number" id="cam-fwd" value="0.1" step="0.05">
-        </div>
-        <div class="input-row">
-            <label>CAM V-FOV (°):</label>
-            <input type="number" id="cam-fov" value="60" step="1">
-        </div>
-        <div class="input-row">
-            <label>CUR PITCH:</label>
-            <span id="val-elevation">0</span>°
+        <div class="input-grid">
+            <div class="field"><label>DIST(m)</label><input type="number" id="in-dist" value="20"></div>
+            <div class="field"><label>VEL(m/s)</label><input type="number" id="in-vel" value="150"></div>
+            <div class="field"><label>CAM-Y(m)</label><input type="number" id="in-camy" value="0.2"></div>
+            <div class="field"><label>FOV(°)</label><input type="number" id="in-fov" value="50"></div>
         </div>
 
-        <button id="start-btn">Initialize HUD</button>
+        <button id="start-btn">Initialize System</button>
     </div>
 
     <script>
-        const aimingDot = document.getElementById('aiming-dot');
-        const elevationDisplay = document.getElementById('val-elevation');
-        const adjElevationDisplay = document.getElementById('val-adj-elevation');
-        const heightDisplay = document.getElementById('val-height');
-        const sysStatus = document.getElementById('sys-status');
-        
-        // Inputs
-        const inputs = ['dist-h', 'muzzle-vel', 'cam-up', 'cam-fwd', 'cam-fov'].reduce((acc, id) => {
-            acc[id] = document.getElementById(id);
-            return acc;
-        }, {});
+        const dot = document.getElementById('aiming-dot');
+        const startBtn = document.getElementById('start-btn');
+        const pitchDisp = document.getElementById('val-pitch');
+        const reqDisp = document.getElementById('val-req');
+        const statusDisp = document.getElementById('status');
 
-        let currentPitch = 0; // Device tilt relative to horizon
+        let currentPitch = 0;
         const G = 9.806;
 
         function solveBallistics(x, y, v) {
             const v2 = v * v;
-            const v4 = v2 * v2;
-            const root = v4 - G * (G * (x * x) + 2 * y * v2);
-
-            if (root < 0) return null; // Target out of range
-
-            // We use the "-" for the low-trajectory solution (usually what turrets use)
-            const angle = Math.atan((v2 - Math.sqrt(root)) / (G * x));
-            return angle * (180 / Math.PI);
+            const root = Math.pow(v, 4) - G * (G * (x * x) + 2 * y * v2);
+            if (root < 0) return null;
+            return Math.atan((v2 - Math.sqrt(root)) / (G * x)) * (180 / Math.PI);
         }
 
-        function update() {
-            const dH = parseFloat(inputs['dist-h'].value) || 0;
-            const v0 = parseFloat(inputs['muzzle-vel'].value) || 1;
-            const camUp = parseFloat(inputs['cam-up'].value) || 0;
-            const camFwd = parseFloat(inputs['cam-fwd'].value) || 0;
-            const vFOV = parseFloat(inputs['cam-fov'].value) || 60;
+        function updateHUD() {
+            const dH = parseFloat(document.getElementById('in-dist').value) || 1;
+            const v0 = parseFloat(document.getElementById('in-vel').value) || 1;
+            const camUp = parseFloat(document.getElementById('in-camy').value) || 0;
+            const vFOV = parseFloat(document.getElementById('in-fov').value) || 50;
 
-            // 1. Where is the target in 3D space relative to the CAMERA?
-            // currentPitch is negative if looking down, positive if looking up
-            const targetZRelCam = dH * Math.tan(currentPitch * Math.PI / 180);
-            heightDisplay.innerText = targetZRelCam.toFixed(2);
+            // Calculate height of whatever is in the center crosshair
+            const targetHeightRelCam = dH * Math.tan(currentPitch * Math.PI / 180);
+            
+            // Adjust for barrel position
+            const x = dH; 
+            const y = targetHeightRelCam + camUp;
 
-            // 2. Adjust target coordinates relative to the TURRET MUZZLE
-            const x = dH + camFwd; 
-            const y = targetZRelCam + camUp;
+            const sol = solveBallistics(x, y, v0);
 
-            // 3. Solve for required barrel angle
-            const reqAngle = solveBallistics(x, y, v0);
-
-            if (reqAngle === null) {
-                sysStatus.innerText = "OUT OF RANGE";
-                sysStatus.className = "status-box out-of-range";
-                aimingDot.style.opacity = "0";
-                adjElevationDisplay.innerText = "---";
+            if (sol === null) {
+                statusDisp.innerText = "OUT OF RANGE";
+                statusDisp.className = "out-of-range";
+                dot.style.display = "none";
             } else {
-                sysStatus.innerText = "LOCKED";
-                sysStatus.className = "status-box";
-                aimingDot.style.opacity = "1";
-                adjElevationDisplay.innerText = reqAngle.toFixed(1);
+                statusDisp.innerText = "LOCKED";
+                statusDisp.className = "";
+                dot.style.display = "block";
+                reqDisp.innerText = sol.toFixed(1);
 
-                // 4. Map the angle to the screen
-                // We need to find the difference between where we are looking (currentPitch)
-                // and where the barrel needs to point.
-                const angleDiff = reqAngle - currentPitch;
-
-                // Simple Linear mapping for small angles, but Tangent mapping is more accurate
-                // screenPos = 50% - (tan(diff) / tan(FOV/2) * 50%)
+                // Map angle difference to screen Y
+                const angleDiff = sol - currentPitch;
                 const halfFOV = (vFOV / 2) * (Math.PI / 180);
                 const diffRad = angleDiff * (Math.PI / 180);
                 
-                const screenOffsetPercent = (Math.tan(diffRad) / Math.tan(halfFOV)) * 50;
-                const finalY = 50 - screenOffsetPercent;
-
-                aimingDot.style.top = `${Math.max(-10, Math.min(110, finalY))}%`;
+                const screenOffset = (Math.tan(diffRad) / Math.tan(halfFOV)) * 50;
+                dot.style.top = `${50 - screenOffset}%`;
             }
         }
 
-        function handleOrientation(event) {
-            // Beta is pitch. Usually 90 is vertical, 0 is flat. 
-            // We want 0 to be the horizon.
-            let pitch = event.beta; 
+        function handleMotion(e) {
+            // Logic for Landscape orientation: 
+            // In landscape, 'gamma' or 'beta' can swap depending on device.
+            // We'll use a calculation that works when the phone is held like a camera.
+            let p = 0;
+            if (window.orientation === 90 || window.orientation === -90) {
+                p = e.gamma; // Landscape pitch
+            } else {
+                p = e.beta - 90; // Portrait pitch
+            }
             
-            // Adjust for typical phone holding (vertical-ish)
-            // If phone is upright, beta is ~90. We subtract 90 to make horizon 0.
-            currentPitch = pitch - 90;
-            
-            elevationDisplay.innerText = currentPitch.toFixed(1);
-            update();
+            currentPitch = -p; 
+            pitchDisp.innerText = currentPitch.toFixed(1);
+            updateHUD();
         }
 
-        async function init() {
+        async function start() {
             try {
+                // 1. Camera
                 const stream = await navigator.mediaDevices.getUserMedia({
                     video: { facingMode: 'environment', width: { ideal: 1280 } }
                 });
                 document.getElementById('camera-feed').srcObject = stream;
 
-                if (DeviceOrientationEvent.requestPermission) {
-                    const res = await DeviceOrientationEvent.requestPermission();
-                    if (res === 'granted') window.addEventListener('deviceorientation', handleOrientation);
+                // 2. Sensors (The iOS Handshake)
+                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    const permission = await DeviceOrientationEvent.requestPermission();
+                    if (permission === 'granted') {
+                        window.addEventListener('deviceorientation', handleMotion);
+                    }
                 } else {
-                    window.addEventListener('deviceorientation', handleOrientation);
+                    window.addEventListener('deviceorientation', handleMotion);
                 }
-                
-                document.getElementById('start-btn').style.display = 'none';
-            } catch (e) {
-                alert("Initialization failed: " + e.message);
+
+                startBtn.style.display = 'none';
+                statusDisp.innerText = "ACTIVE";
+            } catch (err) {
+                alert("Setup error: " + err.message);
             }
         }
 
-        document.getElementById('start-btn').addEventListener('click', init);
-        Object.values(inputs).forEach(input => input.addEventListener('input', update));
+        startBtn.addEventListener('click', start);
+        // Live updates when changing numbers
+        document.querySelectorAll('input').forEach(i => i.addEventListener('input', updateHUD));
     </script>
 </body>
 </html>
